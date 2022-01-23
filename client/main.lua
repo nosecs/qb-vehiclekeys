@@ -344,41 +344,49 @@ RegisterCommand('togglelocks', function()
     LockVehicle()
 end)
 
+RegisterKeyMapping('engine', 'Toggle Engine', 'keyboard', 'K')
+RegisterCommand('engine', function()
+	TriggerEvent('vehiclekeys:client:ToggleEngine', source)
+end)
+
 -- thread
 
-CreateThread(function()
-    while true do
-        local sleep = 100
-        if LocalPlayer.state.isLoggedIn then
-            local ped = PlayerPedId()
-            local entering = GetVehiclePedIsTryingToEnter(ped)
-            if entering ~= 0 and not Entity(entering).state.ignoreLocks then
-                sleep = 2000
+local function setownerthingy(plate, vehicle)
+    TriggerEvent("vehiclekeys:client:SetOwner", plate)
+    SetVehicleDoorsLocked(vehicle, 1)
+    HasVehicleKey = true
+end
+
+AddEventHandler("baseevents:enteringVehicle", function (targetVehicle, vehicleSeat, vehicleDisplayName)
+    local entering = targetVehicle
                 local plate = QBCore.Functions.GetPlate(entering)
                 QBCore.Functions.TriggerCallback('vehiclekeys:server:CheckOwnership', function(result)
                     if not result then -- if not player owned
                         local driver = GetPedInVehicleSeat(entering, -1)
                         if driver ~= 0 and not IsPedAPlayer(driver) then
                             if Config.Rob then
-                                if IsEntityDead(driver) then
-                                    TriggerEvent("vehiclekeys:client:SetOwner", plate)
-                                    SetVehicleDoorsLocked(entering, 1)
-                                    HasVehicleKey = true
+                                if GetVehicleDoorAngleRatio(entering, 0) ~= 0 then
+                                    setownerthingy(plate, entering)
                                 else
                                     SetVehicleDoorsLocked(entering, 2)
                                 end
                             else
-                                TriggerEvent("vehiclekeys:client:SetOwner", plate)
-                                SetVehicleDoorsLocked(entering, 1)
-                                HasVehicleKey = true
+                                setownerthingy(plate, entering)
                             end
                         else
                             QBCore.Functions.TriggerCallback('vehiclekeys:server:CheckHasKey', function(result)
                                 if not lockpicked and lockpickedPlate ~= plate then
-                                    if result == false then
+                                    print(GetVehicleDoorAngleRatio(entering, 0))
+                                    if GetVehicleDoorAngleRatio(entering, 0) < 0.09 then
+                                        HasVehicleKey = true
+                                        SetVehicleDoorsLocked(entering, 1)
+                                    elseif not IsVehicleWindowIntact(entering, 3) then
+                                        HasVehicleKey = true
+                                        SetVehicleDoorsLocked(entering, 1)
+                                    elseif result == false then
                                         SetVehicleDoorsLocked(entering, 2)
                                         HasVehicleKey = false
-                                    else 
+                                    else
                                         HasVehicleKey = true
                                     end
                                 elseif lockpicked and lockpickedPlate == plate then
@@ -392,9 +400,30 @@ CreateThread(function()
                         end
                     end
                 end, plate)
-            end
+            end)
 
-            if IsPedInAnyVehicle(ped, false) and lockpicked and not IsHotwiring and not HasVehicleKey then
+            AddEventHandler("baseevents:enteredVehicle", function (currentVehicle, currentSeat, vehicleDisplayName)
+                if lockpicked and not IsHotwiring and not HasVehicleKey then
+                    local veh = GetVehiclePedIsIn(PlayerPedId())
+                    local vehpos = GetOffsetFromEntityInWorldCoords(veh, 0.0, 2.0, 1.0)
+                    SetVehicleEngineOn(veh, false, false, true)
+                    while GetPedInVehicleSeat(veh, -1) == PlayerPedId() do
+                        DrawText3D(vehpos.x, vehpos.y, vehpos.z, "~g~[H]~w~ - Hotwire")
+                        if IsControlJustPressed(0, 74) then
+                            Hotwire()
+            end
+        end
+    end
+end)
+
+CreateThread(function()
+    while true do
+        local sleep = 100
+        if LocalPlayer.state.isLoggedIn then
+            local ped = PlayerPedId()
+            local entering = GetVehiclePedIsTryingToEnter(ped)
+
+            --[[if IsPedInAnyVehicle(ped, false) and lockpicked and not IsHotwiring and not HasVehicleKey then
                 sleep = 5
                 local veh = GetVehiclePedIsIn(ped)
                 local vehpos = GetOffsetFromEntityInWorldCoords(veh, 0.0, 2.0, 1.0)
@@ -405,7 +434,7 @@ CreateThread(function()
                         Hotwire()
                     end
                 end
-            end
+            end]]
 
             if Config.Rob then
                 if not IsRobbing then
